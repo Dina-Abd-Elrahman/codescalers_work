@@ -1,262 +1,338 @@
 import os
-import git
-import uuid
-
 from Jumpscale import j
+from testconfig import config
 from base_test import BaseTest
 from parameterized import parameterized
 
 
 class TestGitClient(BaseTest):
-    GIT_REPO = "/tmp/test_tft/code/test/tfttesting/git_client_test"
+
+    user_name = config["git"]["name"]
+    user_email = config["git"]["email"]
+    user_passwd = config["git"]["passwd"]
+    REPO_DIR = "/tmp/test_tft"
+    REPO_NAME = "test_git_client"
+    GIT_REPO = "{}/code/test/tfttesting/test_git_client".format(REPO_DIR)
 
     @classmethod
     def setUpClass(cls):
-        cls.info("create a git repo directory")
-        cls.os_command("mkdir -p {}".format(cls.GIT_REPO))
 
-        cls.info("change directory to {}".format(cls.GIT_REPO))
-        cls.info("Initialized empty Git repository")
+        cls.info("Create a git repo directory")
+        j.sal.fs.createDir(cls.GIT_REPO)
 
+        cls.info("Change directory to {}, and create an empty Git repository".format(cls.GIT_REPO))
         cls.os_command("cd {} && git init".format(cls.GIT_REPO))
 
-        cls.info("create a git client")
-        cls.GIT_CLIENT = j.clients.git.get("{}".format(cls.GIT_REPO))
+        cls.info("Create a git client")
+        cls.GIT_CLIENT = j.clients.git.get(cls.GIT_REPO)
 
     def setUp(self):
-        print('\t')
-        self.info('Test case : {}'.format(self._testMethodName))
+
+        self.sub_word = "file"
+        self.RAND_FILE_1 = self.sub_word + self.rand_string()
+        self.RAND_FILE_2 = self.sub_word + self.rand_string()
+
+        self.info("Create two files in a git repo directory")
+        j.sal.fs.createEmptyFile("{}/{}".format(self.GIT_REPO, self.RAND_FILE_1))
+        j.sal.fs.createEmptyFile("{}/{}".format(self.GIT_REPO, self.RAND_FILE_2))
+
+        print("\t")
+        self.info("Test case : {}".format(self._testMethodName))
 
     @classmethod
     def tearDownClass(cls):
-        cls.info("remove git repo directory")
-        cls.os_command("rm -rf /tmp/test_tft/")
+        cls.info("Remove remote branch")
+        cls.os_command("git push origin --delete {}".format(cls.REPO_NAME))
 
-        cls.info("remove git client")
+        cls.info("Remove git repo directory")
+        cls.os_command("rm -rf {}".format(cls.REPO_DIR))
 
-    def test001_addfiles__with_exists_file_list(self):
+    def test001_addfiles(self):
         """
         TC 480
-        Test case for addfiles method in git client with exists files, should pass.
+        Test case for addfiles method in git client.
 
         **Test scenario**
-        #. create two files in /tmp/test/code/test/tfttesting/git_client_test directory.
-        #. use addfiles method to add those two files.
-        #. use (git ls-files) to check that files are added correctly.
+        #. Create two files in a git repo directory.
+        #. Add one of those two file, using addfiles method.
+        #. Make sure that this file is added correctly.
+        #. Try to add non existing file, should return an error.
         """
+        self.info("Add one of those two file, using addfiles method")
+        self.GIT_CLIENT.addFiles(files=[self.RAND_FILE_1])
 
-        self.info("create two files in git repo")
-        self.os_command("cd {} && touch test_1 test_2".format(self.GIT_REPO))
-
-        self.info("use addFiles method to add files")
-        self.GIT_CLIENT.addFiles(files=["test_1", "test_2"])
-
-        self.info("check the files is added or not using (git ls-files) command")
+        self.info("Make sure that this file is added correctly")
         output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
-        self.assertIn("test_1\ntest_2", output.decode())
+        self.assertIn("{}".format(self.RAND_FILE_1), output.decode())
 
-    def test002_addfiles_with_non_exists_file_list(self):
-        """
-        TC 481
-        Test case for addfiles method in git client with non exists file list, should fail.
+        self.info("Try to add non existing file, should return an error")
+        with self.assertRaises(Exception) as error:
+            self.GIT_CLIENT.addFiles(files=["RANDOM_FILE"])
+            self.assertTrue("No such file or directory" in error.exception.args[0])
 
-        **Test scenario**
-        #. use addfiles method to add those two non exists files, should raise exception error.
-        """
-
-        self.info("use addFiles method to add files non exists files, should raise an error")
-        with self.assertRaises(Exception):
-            self.GIT_CLIENT.addFiles(files=["test_3", "test_4"])
-
-    def test003_addFiles_add_some_files(self):
-        """
-        TC 483
-        Test Case for addfiles method in git client to add some files.
-
-        **Test scenario**
-        #. create 4 files in /tmp/test/code/test/tfttesting/git_client_test directory.
-        #. use addfiles method to add two files.
-        #. use (git ls-files) to check that files are added correctly.
-        """
-        self.info("create two files in git repo")
-        self.os_command("cd {} && touch test_1 test_2 test_3 test_4".format(self.GIT_REPO))
-
-        self.info("use addFiles method to add files")
-        self.GIT_CLIENT.addFiles(files=["test_2", "test_4"])
-
-        self.info("check the files is added or not using (git ls-files) command")
-        output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
-        self.assertIn("test_2\ntest_4", output.decode())
-
-    def test004_addRemoveFiles(self):
+    def test002_addRemoveFiles(self):
         """
         TC 484
-        Test Case for addfiles method in git client to add some files.
+        Test Case for addRemoveFiles method in git client.
 
         **Test scenario**
-        #. create 4 files in /tmp/test/code/test/tfttesting/git_client_test directory.
-        #. use addRemoveFiles method to add all files.
-        #. use (git ls-files) to check that files are added correctly.
+        #. Create two files in a git repo directory.
+        #. Create another two files, commit and remove them again.
+        #. Use addRemoveFiles method, check the output.
+        #. Make sure that those two files are added correctly.
         """
-        self.info("create two files in git repo")
-        self.os_command("cd {} && touch test_1 test_2 test_3 test_4".format(self.GIT_REPO))
+        self.info("Create two files, commit and remove them again")
+        File1 = self.rand_string()
+        File2 = self.rand_string()
+        self.GIT_CLIENT.addFiles(files=[File1, File2])
+        self.os_command("cd {} && rm {} {}".format(self.GIT_REPO, File1, File2))
 
-        self.info("use addFiles method to add files")
+        self.info("Add those files, using addRemoveFiles method")
         self.GIT_CLIENT.addRemoveFiles()
 
-        self.info("check the files is added or not using (git ls-files) command")
+        self.info("Make sure that those two files are added correctly")
         output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
-        self.assertIn("test_1\ntest_2\ntest_3\ntest_4", output.decode())
+        self.assertIn("{}\n{}".format(self.RAND_FILE_1, self.RAND_FILE_2), output.decode())
+        self.assertNotIn(File1, File2, output.decode())
 
+    def test003_checkFilesWaitingForCommit(self):
+        """
+        TC 540
+        Test Case for checkFilesWaitingForCommit.
 
-    # def test002_find(self):
+        **Test scenario**
+        #. Create two files in a git repo directory.
+        #. Check that there is files waiting for commit.
+        #. Add those files to git repo.
+        #. Recheck again if there are files waiting for commit or not.
+        """
+        self.info("Check that there is files waiting for commit")
+        self.assertTrue(self.GIT_CLIENT.checkFilesWaitingForCommit())
+
+        self.info("Add those files to git repo")
+        self.GIT_CLIENT.addFiles(files=[self.RAND_FILE_1, self.RAND_FILE_2])
+
+        self.info("Recheck again if there are files waiting for commit or not")
+        self.assertFalse(self.GIT_CLIENT.checkFilesWaitingForCommit())
+
+    def test004_checkout(self):
+        """
+        TC 541
+        Test Case for checkout method.
+
+        **Test scenario**
+        #. Create a new branch and checkout to this new created branch.
+        #. Checkout to master branch.
+        """
+        self.info("Create a new branch and checkout to this new created branch")
+        BRANCH_NAME = self.rand_string()
+        self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, BRANCH_NAME))
+        self.assertEqual(BRANCH_NAME, self.GIT_CLIENT.describe()[1])
+
+        self.info("Checkout to master branch")
+        self.GIT_CLIENT.checkout("master")
+        self.assertEqual("master", self.GIT_CLIENT.describe()[1])
+
+    def test005_commit(self):
+        """
+        TC 542
+        Test Case for commit method.
+
+        **Test scenario**
+        #. Create two files in a git repo directory.
+        #. Use commit with addremove=False, check the commit_id, Make sure the two files aren't added to git repo.
+        #. Repeat step 1 again, with addremove=True, and check the output and make sure that the files is added.
+        """
+        self.info("Use commit with addremove=False, check the commit_id")
+        commit = self.GIT_CLIENT.commit(addremove=False)
+        commit_1 = commit.hexsha
+        self.assertTrue(commit_1)
+
+        self.info("Make sure the two files aren't added to git repo")
+        output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
+        self.assertNotIn(self.RAND_FILE_1, self.RAND_FILE_2, output.decode())
+
+        self.info("Use commit with addremove=True, and check the output and make sure that the files is added")
+        commit = self.GIT_CLIENT.commit(message="test commit", addremove=True)
+        commit_2 = commit.hexsha
+        self.assertNotEquals(commit_1, commit_2)
+
+    # def test006_getBranchOrTag(self):
     #     """
-    #     TC386
-    #     Test case for find method in git client
-    #     find the list of repos locations in you system
-    #     the output will be like this:
-    #     ['github', organization, repo_name, repo_path]
-    #     TODO: will make parametrized with the organization name, try to find better way to check the output
+    #     TC 544
+    #
     #     **Test scenario**
-    #     #. check the output of find method in git client
+    #     #.
     #     """
-    #     self.info(
-    #         "find the list of repos locations in you system the output will be like this: ['github', organization, repo_name, repo_path]"
-    #     )
-    #     result_gitclient = j.clients.git.find()
-    #     self.assertIn("jumpscaleX_core", result_gitclient)
     #
-    # def test001_currentdir_gitrepo(self):
-    #     """TC383
-    #     Test case for currentDirGitRepo method in git client
+    # def test007_describe(self):
+    #     """
+    #     TC 543
+    #
     #     **Test scenario**
-    #     #. cd to /sandbox/code/github/threefoldtech/jumpscaleX_core/
-    #     #. create git client and save it.
-    #     #. check that gitclient BASEDIR is /sandbox/code/github/threefoldtech/jumpscaleX_core/
-    #     #. check that gitclient account is threefoldtech
-    #     #. check that gitclient branchName is the same as the current branch
-    #     #. check that gitclient name is jumpscaleX_core
+    #     #.
     #     """
-    #     currentDirectory = os.getcwd()
-    #     self.info("cd to /sandbox/code/github/threefoldtech/jumpscaleX_core/")
-    #     os.chdir('/sandbox/code/github/threefoldtech/jumpscaleX_core/')
-    #     self.info("create git client and save it")
-    #     gitclient = j.clients.git.currentDirGitRepo()
-    #     gitclient.save()
-    #     self.info("check gitclient BASEDIR")
-    #     self.assertEqual('/sandbox/code/github/threefoldtech/jumpscaleX_core', gitclient.BASEDIR)
-    #     self.info("check gitclient account")
-    #     self.assertEqual('threefoldtech', gitclient.account)
-    #     self.info("check gitclient branch")
-    #     branch_name = self.check_branch()
-    #     self.assertEqual(branch_name, gitclient.branchName)
-    #     self.info("check gitclient name")
-    #     self.assertEqual('jumpscaleX_core', gitclient.name)
-    #     os.chdir(currentDirectory)
     #
-    # @parameterized.expand(
-    #     [
-    #         ("/test_gitclient/",),
-    #         ("/sandbox/code/github/threefoldtech/jumpscaleX_core/JumpscaleCore/clients/git/",)
-    #     ]
-    # )
-    # def test003_find_gitpath(self, path):
+    # def test008_getChangedFiles(self):
     #     """
-    #     TC384
-    #     Test case for findGitPath method in git client
-    #     findGitPath check if this path or any of its parents is a git repo,
-    #                 return the first git repo
-    #     TODO: will be paramterized with True and False.
+    #     TC
+    #
     #     **Test scenario**
-    #     #. check the findGitPath method with two input for path option
-    #     #. print an error with /test_gitclient/
-    #     #. print ( /sandbox/code/github/threefoldtech/jumpscaleX_core/ ) for another input
+    #     #.
     #     """
-    #     self.info("check the findGitPath method with two input for path option")
-    #     self.info("print an error with /test_gitclient/ input")
-    #     if path == "/test_gitclient/":
-    #         try:
-    #             j.clients.git.findGitPath(path)
-    #         except EXCEPTION as err:
-    #             self.fail(err)
-    #     else:
-    #         self.info(
-    #             "print /sandbox/code/github/threefoldtech/jumpscaleX_core/ for the other input"
-    #         )
-    #         result = j.clients.git.findGitPath(path)
-    #         self.assertEqual(result, "/sandbox/code/github/threefoldtech/jumpscaleX_core/")
+
+    def test009_gitconfig(self):
+        """
+        TC 545
+        Test getconfig method.
+
+        **Test scenario**
+        #. Use getconfig to get the value of certain git config field.
+        #. Redo step 1 again, but with non valid value.
+        """
+        self.info("Use getconfig to get the value of certain git config field")
+        self.GIT_CLIENT.setConfig("user.name", self.user_name, local=False)
+        self.assertEqual(self.user_name, self.GIT_CLIENT.getConfig("user.name"))
+
+        self.info("Redo step 1 again, but with non valid value")
+        self.assertFalse(self.GIT_CLIENT.getConfig("RANDOM"))
+
+    def test010_getModifiedFiles(self):
+        """
+        TC 547
+        Test getModifiedFiles method.
+
+        **Test scenario**
+        #. Create two files in a git repo directory.
+        #. Use getModifiedFiles to test that those two files are added.
+        #. Delete one of those two files, and check if it deleted or not.
+        #. Use getModifiedFiles with options (collapse, ignore), and check the output.
+        """
+        self.info("Use getModifiedFiles to test that those two files are added")
+        NEW_FILES = [val for key, val in self.GIT_CLIENT.getModifiedFiles().items() if "N" in key]
+        self.assertEqual(sorted(NEW_FILES), sorted([self.RAND_FILE_1, self.RAND_FILE_2]))
+
+        self.info("Delete one of those two files, and check if it deleted or not")
+        self.GIT_CLIENT.addFiles([self.RAND_FILE_1, self.RAND_FILE_2])
+        os.remove("{}/{}".format(self.GIT_REPO, self.RAND_FILE_1))
+        DELETED_FILE = [val for key, val in self.GIT_CLIENT.getModifiedFiles().items() if "D" in key]
+        self.assertEqual(self.RAND_FILE_1, DELETED_FILE)
+
+        self.info("Use getModifiedFiles with (collapse, ignore) options")
+        j.sal.fs.createEmptyFile("{}/test_1".format(self.GIT_REPO))
+        j.sal.fs.createEmptyFile("{}/test_2".format(self.GIT_REPO))
+        self.assertEqual("test_2", self.GIT_CLIENT.getModifiedFiles(collapse=True, ignore=["test_1"]))
+
+    def test011_hasModifiedFiles(self):
+        """
+        TC 548
+        Test hasModifiedFiles method
+
+        **Test scenario**
+        #. Create two files in a git repo directory.
+        #. Use hasModifiedFiles to check the output, should be True.
+        #. Add those files and recheck again, the output should be false.
+        """
+        self.info("Use hasModifiedFiles to check the output")
+        self.assertTrue(self.GIT_CLIENT.hasModifiedFiles())
+
+        self.info("Add those files {}, {}".format(self.RAND_FILE_1, self.RAND_FILE_2))
+        self.GIT_CLIENT.commit()
+
+        self.info("Check again after we add the files")
+        self.assertFalse(self.GIT_CLIENT.hasModifiedFiles())
+
+    def test012_patchGitignore(self):
+        """
+        TC 551
+        Test patchGitignore method
+
+        **Test scenario**
+        #. Use patchGitignore and check if .gitignore file is created or not.
+        """
+        self.info("Use patchGitignore and check if .gitignore file is created or not")
+        self.GIT_CLIENT.patchGitignore()
+        self.assertTrue(os.path.isfile({} / ".gitignore".format(self.GIT_REPO)))
+
+    # def test013_pull(self):
+    #     """
+    #     TC 552
+    #     Test pull method
     #
-    # def test004_get_currentbranch(self):
-    #     """
-    #     TC385
-    #     Test case for getCurrentBranch method in git client
     #     **Test scenario**
-    #     #. check the branch name in /sandbox/code/github/threefoldtech/jumpscaleX_core/ repo
+    #     #.
     #     """
-    #     self.info("check the branch name in /sandbox/code/github/threefoldtech/jumpscaleX_core/ repo")
-    #     gitclient_currentbranch = j.clients.git.getCurrentBranch("/sandbox/code/github/threefoldtech/jumpscaleX_core/")
-    #     branch_name = self.check_branch()
-    #     self.assertEqual(gitclient_currentbranch, branch_name)
     #
-    # def test005_getgit_reposlist_local(self):
+    # def test014_push(self):
     #     """
-    #     TC387
-    #     Test case for getGitReposListLocal method in git client
-    #     find the list of repos locations in you system
-    #     the output will be like this:
-    #     [repo_name, repo_path]
-    #     TODO: add parametrized for provider, account, name, and errorIfNone
+    #     TC 554
+    #
     #     **Test scenario**
-    #     #. check the output of getGitReposListLocal method in git client
+    #     #.
     #     """
-    #     self.info("find the list of repos locations in you system the output will be like this: [repo_name, repo_path]")
-    #     getreposlist = j.clients.git.getGitReposListLocal()
-    #     self.assertIn("/sandbox/code/github/threefoldtech/jumpscaleX_core", getreposlist)
+
+    def test015_removeFiles(self):
+        """
+        TC 555
+        Test removeFiles method.
+
+        **Test scenario**
+        #. Create two files in a git repo directory.
+        #. Use removeFiles, and check if those files are deleted or not.
+        #. Try to use removeFiles to check non existing file, should raise an error.
+        """
+        self.GIT_CLIENT.addFiles([self.RAND_FILE_1, self.RAND_FILE_2])
+
+        self.info("Use removeFiles, and check if those files are deleted or not")
+        self.GIT_CLIENT.removeFiles([self.RAND_FILE_2])
+        output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
+        self.assertNotIn("{}".format(self.RAND_FILE_1), output.decode())
+
+        self.info("Try to use removeFiles to check non existing file")
+        with self.assertRaises(Exception) as error:
+            self.GIT_CLIENT.removeFiles(files=["RANDOM_FILE"])
+            self.assertTrue("did not match any files" in error.exception.args[0])
+
+    def test016_setConfig_unsetconfig(self):
+        """
+        TC 556
+        Test setConfig method
+
+        **Test scenario**
+        #. Set user mail.
+        #. Try to set non valid field.
+        #. Unset the email.
+        """
+        self.info("Set user mail")
+        self.GIT_CLIENT.setConfig("user.email", self.user_email, local=False)
+        self.assertEqual(self.user_email, self.GIT_CLIENT.getConfig("user.email"))
+
+        self.info("Try to set non valid field")
+        with self.assertRaises(Exception) as error:
+            self.GIT_CLIENT.setConfig("NON_VALID", "NON_VALID", local=False)
+            self.assertTrue("key does not contain a section" in error.exception.args[0])
+
+        self.info("Unset the email")
+        self.GIT_CLIENT.unsetConfig("user.email", local=False)
+
+    # def test017_setRemoteURL(self):
+    #     """
+    #     """
+
+    # @parameterized.expand([
+    #     ("test", True),
+    #     ("NEW", True),
+    #     ("test", False),
+    #     ("NEW", False),
+    # ])
+    # def test018_switchBranch(self):
+    #     """
+    #     TC 558
     #
-    # def test006_pull_git_repo(self):
-    #     """
-    #     TC393
-    #     Test case for pullGitRepo method in git client
-    #     TODO: will add the depth option but trying to find good way to code it
     #     **Test scenario**
-    #     #. try pullGitRepo with dest option /tmp/test_gitclient/
-    #         && and with url option (https://github.com/threefoldtech/jumpscaleX_threebot.git)
-    #     #. check that the repo in /tmp/test_gitclient/ directory.
+    #     #. Create new branch.
+    #     #. Use switchBranch with (existing branch name, create=True).
+    #     #. Use switchBranch with (non existing branch name, create=True).
+    #     #. Use switchBranch with (existing branch name, create=False).
+    #     #. Use switchBranch with (non existsing branch name, create=False)
     #     """
-    #     self.info("try pullGitRepo with dest option /tmp/test_gitclient/ and threebot repo as a url")
-    #     j.clients.git.pullGitRepo(
-    #         dest="/tmp/test_gitclient/", url="https://github.com/threefoldtech/jumpscaleX_core.git")
-    #     self.info("check that the repo in /tmp/test_gitclient/ directory")
-    #     output, error = self.os_command("git status")
-    #     self.assertFalse(error)
-    #     self.assertIn("nothing to commit, working tree clean", output.decode())
-    #
-    # def test007_update_git_repos(self):
-    #     """
-    #     TC394
-    #     Test case for updateGitRepos method in git client
-    #     **Test scenario**
-    #     #. clone a repo in /sandbox/code/github/tfttesting/ directory.
-    #     #. create a file with a random name in git directory.
-    #     #. use updateGitRepos to add and commit this file with certain commit message.
-    #     #. check the latest commit on this repo make sure it's the same as the FILE_NAME.
-    #     """
-    #     self.info("clone a repo in /sandbox/code/github/tfttesting/ directory")
-    #     git.Repo.clone_from("https://github.com/tfttesting/updateGitRepos.git", "/sandbox/code/github/tfttesting/")
-    #
-    #     self.info("create a file with a random name in git directory")
-    #     FILE_NAME = str(uuid.uuid4()).replace("-", "")[:10]
-    #     with open('/sandbox/code/github/tfttesting/{}.txt'.format(FILE_NAME), 'w') as f:
-    #         data = 'this is new file {}'.format(FILE_NAME)
-    #         f.write(data)
-    #
-    #     self.info("use updateGitRepos to add and commit this file with certain commit message")
-    #     j.clients.git.updateGitRepos(provider='github', account='tfttesting', name='updateGitRepos',
-    #                                  message='adding file {}'.format(FILE_NAME))
-    #
-    #     self.info("check the latest commit on this repo make sure it's the same as the FILE_NAME")
-    #     repo = git.Repo("/sandbox/code/github/tfttesting/")
-    #     commits = repo.head.log()
-    #     latest_commit = str(commits[-1]).split("commit: ")[-1].replace("\n", "")
-    #
-    #     self.assertEqual("adding file {}".format(FILE_NAME), latest_commit)
