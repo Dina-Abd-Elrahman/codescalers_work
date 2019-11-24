@@ -2,7 +2,6 @@ import os
 from Jumpscale import j
 from testconfig import config
 from base_test import BaseTest
-from parameterized import parameterized
 
 
 class TestGitClient(BaseTest):
@@ -10,6 +9,7 @@ class TestGitClient(BaseTest):
     user_name = config["git"]["name"]
     user_email = config["git"]["email"]
     user_passwd = config["git"]["passwd"]
+    git_token = config["git"]["token"]
     REPO_DIR = "/tmp/test_tft"
     REPO_NAME = "test_git_client"
     GIT_REPO = "{}/code/test/tfttesting/test_git_client".format(REPO_DIR)
@@ -22,7 +22,6 @@ class TestGitClient(BaseTest):
 
         cls.info("Change directory to {}, and create an empty Git repository".format(cls.GIT_REPO))
         cls.os_command("cd {} && git init".format(cls.GIT_REPO))
-
         cls.info("Create a git client")
         cls.GIT_CLIENT = j.clients.git.get(cls.GIT_REPO)
 
@@ -50,7 +49,7 @@ class TestGitClient(BaseTest):
     def test001_addfiles(self):
         """
         TC 480
-        Test case for addfiles method in git client.
+        Test add new files in git repo.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -73,7 +72,7 @@ class TestGitClient(BaseTest):
     def test002_addRemoveFiles(self):
         """
         TC 484
-        Test Case for addRemoveFiles method in git client.
+        Test add new files and remove deleted ones..
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -98,7 +97,7 @@ class TestGitClient(BaseTest):
     def test003_checkFilesWaitingForCommit(self):
         """
         TC 540
-        Test Case for checkFilesWaitingForCommit.
+        Test to check if there is files waiting for Commit or not.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -118,7 +117,7 @@ class TestGitClient(BaseTest):
     def test004_checkout(self):
         """
         TC 541
-        Test Case for checkout method.
+        Test checkout method.
 
         **Test scenario**
         #. Create a new branch and checkout to this new created branch.
@@ -136,7 +135,7 @@ class TestGitClient(BaseTest):
     def test005_commit(self):
         """
         TC 542
-        Test Case for commit method.
+        Test commit method.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -157,34 +156,66 @@ class TestGitClient(BaseTest):
         commit_2 = commit.hexsha
         self.assertNotEquals(commit_1, commit_2)
 
-    # def test006_getBranchOrTag(self):
-    #     """
-    #     TC 544
-    #
-    #     **Test scenario**
-    #     #.
-    #     """
-    #
-    # def test007_describe(self):
-    #     """
-    #     TC 543
-    #
-    #     **Test scenario**
-    #     #.
-    #     """
-    #
-    # def test008_getChangedFiles(self):
-    #     """
-    #     TC
-    #
-    #     **Test scenario**
-    #     #.
-    #     """
+    def test006_describe_getBranchOrTag(self):
+        """
+        TC 543, 544
+        Test get Branch or Tag name, and describe option in a git command.
 
-    def test009_gitconfig(self):
+        **Test scenario**
+        #. Use describe to check the branch name.
+        #. Create new tag.
+        #. Use getBranchOrTag, and describe method to get the tag name.
+        #. Add new files and commit.
+        #. Use getBranchOrTag method to get the branch name.
+        #. Use describe method and check the output.
+        """
+        self.info("Use describe to check the branch name")
+        output, error = self.os_command("git branch | grep \\* | cut -d ' ' -f2")
+        self.assertEqual("('branch', {})".format(output.decode().rstrip()), self.GIT_CLIENT.describe())
+
+        self.info("Create new tag")
+        self.os_command("cd {} && git tag 1.0".format(self.GIT_REPO))
+
+        self.info("Use getBranchOrTag, and describe method to get the tag name")
+        self.assertEqual("('tag', '1.0')", self.GIT_CLIENT.getBranchOrTag())
+        self.assertEqual("('tag', '1.0\n')", self.GIT_CLIENT.describe())
+
+        self.info("Add new files and commit")
+        commit = self.GIT_CLIENT.commit("Add new files and commit")
+        Commit_ID = commit.hexsha
+
+        self.info("Use getBranchOrTag method to get the branch name")
+        self.assertEqual("('branch', {})".format(output.decode().rstrip()), self.GIT_CLIENT.getBranchOrTag())
+
+        self.info("Use describe method and check the output")
+        self.assertEqual("('tag', '1.0-1-g{}\n')".format(Commit_ID[0:7]), self.GIT_CLIENT.describe())
+
+    def test007_getChangedFiles(self):
+        """
+        TC
+        Test getChangedFiles which lists all changed files since certain ref (Commit_ID).
+
+        **Test scenario**
+        #. Add 2 files to git repo, Commit.
+        #. Use getChangedFiles method to get those files from certain ref (Commit_ID) to certain ref (Commit_ID).
+        """
+        self.info("Grep the current Commit_ID")
+        output, error = self.os_command("git rev-parse HEAD")
+        current_commit_id = output.decode().rstrip()
+
+        self.info("Add 2 files to git repo, Commit")
+        new_commit = self.GIT_CLIENT.commit("Add 2 files to git repo")
+
+        self.info("Use getChangedFiles method to get those files from certain Commit_ID to certain ref (Commit_ID)")
+        self.assertEqual(
+            sorted([self.RAND_FILE_1, self.RAND_FILE_2]),
+            sorted(self.GIT_CLIENT.getChangedFiles(fromref=current_commit_id, toref=new_commit.hexsha)),
+        )
+
+    def test008_gitconfig(self):
         """
         TC 545
-        Test getconfig method.
+        Test get config value to certain git config field.
 
         **Test scenario**
         #. Use getconfig to get the value of certain git config field.
@@ -197,10 +228,10 @@ class TestGitClient(BaseTest):
         self.info("Redo step 1 again, but with non valid value")
         self.assertFalse(self.GIT_CLIENT.getConfig("RANDOM"))
 
-    def test010_getModifiedFiles(self):
+    def test009_getModifiedFiles(self):
         """
         TC 547
-        Test getModifiedFiles method.
+        Test to get the modified files.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -223,10 +254,10 @@ class TestGitClient(BaseTest):
         j.sal.fs.createEmptyFile("{}/test_2".format(self.GIT_REPO))
         self.assertEqual("test_2", self.GIT_CLIENT.getModifiedFiles(collapse=True, ignore=["test_1"]))
 
-    def test011_hasModifiedFiles(self):
+    def test010_hasModifiedFiles(self):
         """
         TC 548
-        Test hasModifiedFiles method
+        Test the existing of modified files.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -242,19 +273,19 @@ class TestGitClient(BaseTest):
         self.info("Check again after we add the files")
         self.assertFalse(self.GIT_CLIENT.hasModifiedFiles())
 
-    def test012_patchGitignore(self):
+    def test011_patchGitignore(self):
         """
         TC 551
-        Test patchGitignore method
+        Test patch gitignore file in git repo.
 
         **Test scenario**
         #. Use patchGitignore and check if .gitignore file is created or not.
         """
         self.info("Use patchGitignore and check if .gitignore file is created or not")
         self.GIT_CLIENT.patchGitignore()
-        self.assertTrue(os.path.isfile({} / ".gitignore".format(self.GIT_REPO)))
+        self.assertTrue(os.path.isfile("{}/.gitignore".format(self.GIT_REPO)))
 
-    # def test013_pull(self):
+    # def test012_pull(self):
     #     """
     #     TC 552
     #     Test pull method
@@ -263,7 +294,7 @@ class TestGitClient(BaseTest):
     #     #.
     #     """
     #
-    # def test014_push(self):
+    # def test013_push(self):
     #     """
     #     TC 554
     #
@@ -271,10 +302,10 @@ class TestGitClient(BaseTest):
     #     #.
     #     """
 
-    def test015_removeFiles(self):
+    def test014_removeFiles(self):
         """
         TC 555
-        Test removeFiles method.
+        Test remove files from git repo.
 
         **Test scenario**
         #. Create two files in a git repo directory.
@@ -293,10 +324,10 @@ class TestGitClient(BaseTest):
             self.GIT_CLIENT.removeFiles(files=["RANDOM_FILE"])
             self.assertTrue("did not match any files" in error.exception.args[0])
 
-    def test016_setConfig_unsetconfig(self):
+    def test015_setConfig_unsetconfig(self):
         """
         TC 556
-        Test setConfig method
+        Test set and unset new config values to certain config fields.
 
         **Test scenario**
         #. Set user mail.
@@ -315,24 +346,40 @@ class TestGitClient(BaseTest):
         self.info("Unset the email")
         self.GIT_CLIENT.unsetConfig("user.email", local=False)
 
-    # def test017_setRemoteURL(self):
-    #     """
-    #     """
+    def test016_setRemoteURL(self):
+        """
+        """
 
-    # @parameterized.expand([
-    #     ("test", True),
-    #     ("NEW", True),
-    #     ("test", False),
-    #     ("NEW", False),
-    # ])
-    # def test018_switchBranch(self):
-    #     """
-    #     TC 558
-    #
-    #     **Test scenario**
-    #     #. Create new branch.
-    #     #. Use switchBranch with (existing branch name, create=True).
-    #     #. Use switchBranch with (non existing branch name, create=True).
-    #     #. Use switchBranch with (existing branch name, create=False).
-    #     #. Use switchBranch with (non existsing branch name, create=False)
-    #     """
+    def test017_switchBranch(self, Branch_Name, Create_status):
+        """
+        TC 558
+        Test switch branch in git repo.
+
+        **Test scenario**
+        #. Create new branch.
+        #. Use switchBranch with (existing branch name, create=True).
+        #. Use switchBranch with (non existing branch name, create=True).
+        #. Use switchBranch with (existing branch name, create=False).
+        #. Use switchBranch with (non existing branch name, create=False).
+        """
+        self.info("Create new branch")
+        new_branch_name = self.rand_string()
+        self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, new_branch_name))
+
+        self.info("Use switchBranch with (existing branch name, create=True)")
+        self.assertEqual(
+            "was not able to create branch test_2", self.GIT_CLIENT.switchBranch("NEW_BRANCH", create=True)
+        )
+
+        self.info("Use switchBranch with (non existing branch name, create=True)")
+        self.GIT_CLIENT.switchBranch("NEW_BRANCH", create=True)
+        self.assertEqual("NEW_BRANCH", self.GIT_CLIENT.describe()[1])
+
+        self.info("Use switchBranch with (existing branch name, create=False)")
+        self.GIT_CLIENT.switchBranch(new_branch_name, create=False)
+        self.assertEqual(new_branch_name, self.GIT_CLIENT.describe()[1])
+
+        self.info("Use switchBranch with (non existing branch name, create=False)")
+        with self.assertRaises(Exception) as error:
+            self.GIT_CLIENT.switchBranch("BLABLA", create=False)
+            self.assertTrue("did not match any file(s) known to git" in error.exception.args[0])
