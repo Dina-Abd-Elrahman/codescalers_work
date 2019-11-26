@@ -1,4 +1,5 @@
 import os
+import unittest
 from Jumpscale import j
 from testconfig import config
 from base_test import BaseTest
@@ -29,17 +30,23 @@ class TestGitClient(BaseTest):
         with open("/{}/README.md".format(cls.GIT_REPO), "a") as out:
             out.write("README.md" + "\n")
         cls.os_command("cd {} && git add README.md".format(cls.GIT_REPO))
-        cls.os_command("cd {} && git commit -m \"first commit\"".format(cls.GIT_REPO))
+        cls.os_command('git config --global user.email "{}"'.format(cls.user_email))
+        cls.os_command('git config --global user.name "{}"'.format(cls.user_name))
+        cls.os_command('cd {} && git commit -m "first commit"'.format(cls.GIT_REPO))
 
         cls.info("Push new changes to the remote git repo")
-        cls.os_command("git push -u 'https://{}:{}@github.com/{}/{}.git' master"
-                       .format(cls.user_name, cls.user_passwd, cls.user_name, cls.REPO_NAME))
+        cls.os_command(
+            "git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
+                cls.user_name, cls.user_passwd, cls.user_name, cls.REPO_NAME
+            )
+        )
 
         cls.info("Create a git client")
         cls.GIT_CLIENT = j.clients.git.get(cls.GIT_REPO)
 
         cls.info("Grep the Commit_ID")
-        cls.C_ID = cls.get_current_branch_name()
+        output, error = cls.os_command("cd {} && git rev-parse HEAD".format(cls.GIT_REPO))
+        cls.C_ID = output.decode().rstrip()
 
     def setUp(self):
         print("\t")
@@ -47,13 +54,13 @@ class TestGitClient(BaseTest):
 
     def tearDown(self):
         self.info("Revoke to {} C_ID".format(self.C_ID))
-        self.os_command("cd {} && git reset --hard {}".format(self.GIT_REPO, self.C_ID))
+        self.os_command("cd {} && git reset --hard {} && git checkout master".format(self.GIT_REPO, self.C_ID))
 
     @classmethod
     def tearDownClass(cls):
         cls.info("Remove remote repo")
-        repo_to_be_deleted = cls.github_client.repo_get(cls.REPO_NAME)
-        cls.github_client.repo_delete(repo_to_be_deleted)
+        repo = cls.github_client.repo_get(cls.REPO_NAME)
+        cls.github_client.repo_delete(repo)
 
         cls.info("Remove git repo directory")
         cls.os_command("rm -rf {}".format(cls.REPO_DIR))
@@ -91,7 +98,7 @@ class TestGitClient(BaseTest):
 
         :return: Commit_ID
         """
-        output, error = self.os_command("cd {} && git rev-parse HEAD")
+        output, error = self.os_command("cd {} && git rev-parse HEAD".format(self.GIT_REPO))
         return output.decode().rstrip()
 
     def test001_add_files(self):
@@ -134,7 +141,7 @@ class TestGitClient(BaseTest):
         FILE_1, FILE_2 = self.create_two_files()
 
         self.info("Create another two files FILE_3, FILE_4, add those two files, then remove them")
-        FILE_3, FILE_4 = self.rand_string(), self.rand_string()
+        FILE_3, FILE_4 = self.create_two_files()
         self.GIT_CLIENT.addFiles(files=[FILE_3, FILE_4])
         self.os_command("cd {} && rm {} {}".format(self.GIT_REPO, FILE_3, FILE_4))
 
@@ -143,7 +150,7 @@ class TestGitClient(BaseTest):
 
         self.info("Make sure that FILE_1, FILE_2 are added, and FILE_3, FILE_4 are removed")
         output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
-        self.assertIn("{}\n{}".format(FILE_1, FILE_2), output.decode())
+        self.assertIn(FILE_1 and FILE_2, output.decode())
         self.assertNotIn(FILE_3 and FILE_4, output.decode())
 
     def test003_check_files_waiting_for_commit(self):
@@ -177,45 +184,47 @@ class TestGitClient(BaseTest):
         **Test scenario**
         #. Create a new branch and checkout to this branch.
         #. Checkout to master branch.
-        #. Check the current Commit_ID.
+        #. Check the current Commit_ID (C_ID1).
         #. Create 2 files, add them, then commit.
-        #. Use checkout to switch to previous Commit_ID.
-        #. Remove one of the two files.
+        #. Use checkout to switch to previous Commit_ID (C_ID1).
+        #. Create two new files (FILE_3, FILE_4), then commit, then Remove one of the two files.
         #. Use checkout to return the removed file back.
         #. Check if FILE_1 is back.
         """
         self.info("Create a new branch and checkout to this new created branch")
         BRANCH_NAME = self.rand_string()
-        self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, BRANCH_NAME))
+        output, error = self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, BRANCH_NAME))
+        self.assertFalse(error)
         self.assertEqual(BRANCH_NAME, self.get_current_branch_name())
 
         self.info("Checkout to master branch")
         self.GIT_CLIENT.checkout("master")
         self.assertEqual("master", self.get_current_branch_name())
 
-        self.info("Check the current Commit_ID")
+        self.info("Check the current Commit_ID (C_ID1)")
         C_ID1 = self.get_current_commit_id()
 
         self.info("Create 2 files, add them, then commit")
-        FILE_1, FILE_2 = self.create_two_files()
+        self.create_two_files()
         self.GIT_CLIENT.commit("Add two new files")
-        C_ID2 = self.get_current_commit_id()
 
-        self.info("Use checkout to switch to previous Commit_ID")
+        self.info("Use checkout to switch to previous Commit_ID (C_ID1)")
         self.GIT_CLIENT.checkout(C_ID1)
 
-        self.info("Check that checkout is checkout to the previous Commit_ID")
+        self.info("Check that checkout is checkout to the previous Commit_ID (C_ID1)")
         self.assertEqual(C_ID1, self.get_current_commit_id())
 
-        self.info("Remove one of the two files")
-        os.remove("{}/{}".format(self.GIT_REPO, FILE_1))
-        self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, FILE_1)))
+        self.info("Create two new files (FILE_3, FILE_4), then commit, then Remove one of the two files")
+        FILE_3, FILE_4 = self.create_two_files()
+        self.GIT_CLIENT.commit("Add two new files")
+        os.remove("{}/{}".format(self.GIT_REPO, FILE_3))
+        self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, FILE_3)))
 
         self.info("Use checkout to return the removed file back")
-        self.GIT_CLIENT.checkout("{}/{}".format(self.GIT_REPO, FILE_1))
+        self.GIT_CLIENT.checkout("{}/{}".format(self.GIT_REPO, FILE_3))
 
-        self.info("Check if {} is back".format(FILE_1))
-        self.assertTrue(os.path.isfile("{}/{}".format(self.GIT_REPO, FILE_1)))
+        self.info("Check if {} is back".format(FILE_3))
+        self.assertTrue(os.path.isfile("{}/{}".format(self.GIT_REPO, FILE_3)))
 
     def test005_commit(self):
         """
@@ -263,25 +272,28 @@ class TestGitClient(BaseTest):
         #. Use describe method and check the output.
         """
         self.info("Use describe to check the branch name")
-        output, error = self.os_command("git branch | grep \\* | cut -d ' ' -f2")
-        self.assertEqual("('branch', {})".format(output.decode().rstrip()), self.GIT_CLIENT.describe())
+        current_branch = self.get_current_branch_name()
+        self.assertEqual("('branch', '{}')".format(current_branch), str(self.GIT_CLIENT.describe()))
 
         self.info("Create new tag")
         self.os_command("cd {} && git tag 1.0".format(self.GIT_REPO))
 
         self.info("Use getBranchOrTag, and describe method to get the tag name")
-        self.assertEqual("('tag', '1.0')", self.GIT_CLIENT.getBranchOrTag())
-        self.assertEqual("('tag', '1.0\n')", self.GIT_CLIENT.describe())
+        self.assertEqual(("tag", "1.0"), self.GIT_CLIENT.getBranchOrTag())
+        self.assertEqual(("tag", "1.0\n"), self.GIT_CLIENT.describe())
 
         self.info("Add new files and commit")
+        self.create_two_files()
         commit = self.GIT_CLIENT.commit("Add new files and commit")
         Commit_ID = commit.hexsha
 
         self.info("Use getBranchOrTag method to get the branch name")
-        self.assertEqual("('branch', {})".format(output.decode().rstrip()), self.GIT_CLIENT.getBranchOrTag())
+        self.assertEqual(
+            "('branch', '{}')".format(self.get_current_branch_name()), str(self.GIT_CLIENT.getBranchOrTag())
+        )
 
         self.info("Use describe method and check the output")
-        self.assertEqual("('tag', '1.0-1-g{}\n')".format(Commit_ID[0:7]), self.GIT_CLIENT.describe())
+        self.assertEqual(("tag", "1.0-1-g{}\n".format(Commit_ID[0:7])), self.GIT_CLIENT.describe())
 
     def test007_get_changed_files(self):
         """
@@ -289,26 +301,22 @@ class TestGitClient(BaseTest):
         Test getChangedFiles which lists all changed files since certain ref (Commit_ID).
 
         **Test scenario**
-        #. Grep the current Commit_ID.
+        #. Grep the current Commit_ID C_ID1.
         #. Add 2 files (FILE_1, FILE_2) to git repo, then commit.
-        #. Grep the new Commit_ID.
-        #. Use getChangedFiles method to get those two files from certain (current Commit_ID) to (new Commit_ID).
+        #. Grep the new Commit_ID C_ID2.
+        #. Use getChangedFiles method to get those two files from C_ID1 to C_ID2.
         """
 
-        self.info("Grep the current Commit_ID")
-        output, error = self.os_command("git rev-parse HEAD")
-        current_commit_id = output.decode().rstrip()
+        self.info("Grep the current C_ID1")
+        C_ID1 = self.get_current_commit_id()
 
         self.info("Add 2 files to git repo, then commit")
         FILE_1, FILE_2 = self.create_two_files()
-        new_commit = self.GIT_CLIENT.commit("Add 2 files to git repo")
+        C_ID2 = self.GIT_CLIENT.commit("Add 2 files to git repo")
 
-        self.info(
-            "Use getChangedFiles method to get those two files from certain (current Commit_ID) to (new Commit_ID)"
-        )
+        self.info("Use getChangedFiles method to get those two files from C_ID1 to C_ID2")
         self.assertEqual(
-            sorted([FILE_1, FILE_2]),
-            sorted(self.GIT_CLIENT.getChangedFiles(fromref=current_commit_id, toref=new_commit.hexsha)),
+            sorted([FILE_1, FILE_2]), sorted(self.GIT_CLIENT.getChangedFiles(fromref=C_ID1, toref=C_ID2.hexsha))
         )
 
     def test008_git_config(self):
@@ -333,27 +341,26 @@ class TestGitClient(BaseTest):
         Test to get the modified files.
 
         **Test scenario**
-        #. Create two files in a git repo directory.
+        #. Create two files (FILE_1, FILE_2) in a git repo directory.
         #. Use getModifiedFiles to test that those two files are added.
         #. Delete one of those two files, and check if it is deleted.
         #. Use getModifiedFiles with options (collapse, ignore), and check the output.
         """
         FILE_1, FILE_2 = self.create_two_files()
-
         self.info("Use getModifiedFiles to test that those two files are added")
         NEW_FILES = [val for key, val in self.GIT_CLIENT.getModifiedFiles().items() if "N" in key]
-        self.assertEqual(sorted(NEW_FILES), sorted([FILE_1, FILE_2]))
+        self.assertEqual(sorted(NEW_FILES[0]), sorted([FILE_1, FILE_2]))
 
         self.info("Delete one of those two files, and check if it is deleted")
         self.GIT_CLIENT.addFiles([FILE_1, FILE_2])
         os.remove("{}/{}".format(self.GIT_REPO, FILE_1))
         DELETED_FILE = [val for key, val in self.GIT_CLIENT.getModifiedFiles().items() if "D" in key]
-        self.assertEqual(FILE_1, DELETED_FILE)
+        self.assertEqual([[FILE_1]], DELETED_FILE)
 
         self.info("Use getModifiedFiles with (collapse, ignore) options")
-        j.sal.fs.createEmptyFile("{}/test_1".format(self.GIT_REPO))
-        j.sal.fs.createEmptyFile("{}/test_2".format(self.GIT_REPO))
-        self.assertEqual("test_2", self.GIT_CLIENT.getModifiedFiles(collapse=True, ignore=["test_1"]))
+        FILE_3, FILE_4 = self.create_two_files()
+        self.assertIn(FILE_4, self.GIT_CLIENT.getModifiedFiles(collapse=True, ignore=[FILE_3]))
+        self.assertNotIn(FILE_3, self.GIT_CLIENT.getModifiedFiles(collapse=True, ignore=[FILE_3]))
 
     def test010_has_modified_files(self):
         """
@@ -392,39 +399,73 @@ class TestGitClient(BaseTest):
         self.GIT_CLIENT.patchGitignore()
         self.assertTrue(os.path.isfile("{}/.gitignore".format(self.GIT_REPO)))
 
-    def test012_pull_and_push(self):
+    @unittest.skip("skip push")
+    def test012_pull(self):
         """
         TC 552
-        Test pull and push from and to remote repo.
+        Test pull from the remote repo.
 
         **Test scenario**
         #. Create 2 files (File_1, File_2).
-        #. Use pull method, should raise an Exception that there are files waiting to commit.
         #. Commit the two files.
         #. Push the local changes to the remote repo.
         #. Reset to old Commit ID, make sure that (File_1, File_2) files don't exist anymore.
         #. Pull the latest changes.
         #. Recheck the existing of (File_1, File_2) files in the local repo.
+        #. Create 2 files (File_3, File_4).
+        #. Use pull method with files waiting to commit, should raise an Exception
         """
-        self.info("Create 2 files")
+        self.info("Create 2 files (File_1, File_2)")
         File_1, File_2 = self.create_two_files()
-
-        self.info("Use pull method, should raise an Exception")
-        with self.assertRaises(Exception) as error:
-            self.GIT_CLIENT.pull()
-            self.assertTrue("files waiting to commit" in error.exception.args[0])
 
         self.info("Commit the two files")
         self.GIT_CLIENT.commit("Add the two files")
 
         self.info("Push the local changes to the remote repo")
-        self.GIT_CLIENT.push()
+        self.os_command(
+            "git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
+                self.user_name, self.user_passwd, self.user_name, self.REPO_NAME
+            )
+        )
 
         self.info("Reset to old Commit ID, make sure that (File_1, File_2) files don't exist anymore")
         self.os_command("cd {} && git reset --hard {}".format(self.GIT_REPO, self.C_ID))
 
+        self.info("Pull the latest changes")
+        self.GIT_CLIENT.pull()
+
         self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, File_1)))
         self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, File_2)))
+
+        self.info("Create 2 files")
+        self.create_two_files()
+
+        self.info("Commit the two files (File_3, File_4)")
+        self.GIT_CLIENT.commit("Add the two files")
+
+        self.info("Use pull method with files waiting to commit, should raise an Exception")
+        with self.assertRaises(Exception) as error:
+            self.GIT_CLIENT.pull()
+            self.assertTrue("files waiting to commit" in error.exception.args[0])
+
+    @unittest.skip("should run manually")
+    def push(self):
+        """
+        TC 553
+
+        **Test scenario**
+        #. Create 2 files (File_1, File_2).
+        #. Commit changes in the local repo, using commit method in git client.
+        #. Push changes to the remote repo, using push method.
+        """
+        self.info("Create 2 files (File_1, File_2)")
+        File_1, File_2 = self.create_two_files()
+
+        self.info("Commit the two files")
+        self.GIT_CLIENT.commit("Add the two files")
+
+        self.info("Push changes to the remote repo, using push method")
+        self.GIT_CLIENT.push()
 
     def test013_remove_files(self):
         """
@@ -437,13 +478,12 @@ class TestGitClient(BaseTest):
         #. Try to use removeFiles to check non existing file, should raise an error.
         """
         FILE_1, FILE_2 = self.create_two_files()
-
         self.GIT_CLIENT.addFiles([FILE_1, FILE_2])
 
         self.info("Use removeFiles, and check if those files are deleted")
         self.GIT_CLIENT.removeFiles([FILE_2])
         output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
-        self.assertNotIn("{}".format(FILE_1), output.decode())
+        self.assertNotIn("{}".format(FILE_2), output.decode())
 
         self.info("Try to use removeFiles to check non existing file")
         with self.assertRaises(Exception) as error:
@@ -488,7 +528,7 @@ class TestGitClient(BaseTest):
         self.info("Use gitconfig method to check that URL is changed")
         self.assertEqual(
             "git@github.com:{}/{}.git".format(self.user_name, self.REPO_NAME),
-            self.GIT_CLIENT.getConfig("remote.origin.url")
+            self.GIT_CLIENT.getConfig("remote.origin.url"),
         )
 
         self.info("Reset remote URL to HTTPS again")
@@ -501,27 +541,22 @@ class TestGitClient(BaseTest):
 
         **Test scenario**
         #. Create new branch.
-        #. Use switchBranch with (existing branch name, create=True).
         #. Use switchBranch with (non existing branch name, create=True).
         #. Use switchBranch with (existing branch name, create=False).
         #. Use switchBranch with (non existing branch name, create=False).
         """
         self.info("Create new branch")
-        new_branch_name = self.rand_string()
-        self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, new_branch_name))
-
-        self.info("Use switchBranch with (existing branch name, create=True)")
-        self.assertEqual(
-            "was not able to create branch test_2", self.GIT_CLIENT.switchBranch("NEW_BRANCH", create=True)
-        )
+        branch_1 = self.rand_string()
+        self.os_command("cd {} && git checkout -b {}".format(self.GIT_REPO, branch_1))
 
         self.info("Use switchBranch with (non existing branch name, create=True)")
-        self.GIT_CLIENT.switchBranch("NEW_BRANCH", create=True)
-        self.assertEqual("NEW_BRANCH", self.GIT_CLIENT.describe()[1])
+        branch_2 = self.rand_string()
+        self.GIT_CLIENT.switchBranch(branch_2, create=True)
+        self.assertEqual(branch_2, self.get_current_branch_name())
 
         self.info("Use switchBranch with (existing branch name, create=False)")
-        self.GIT_CLIENT.switchBranch(new_branch_name, create=False)
-        self.assertEqual(new_branch_name, self.GIT_CLIENT.describe()[1])
+        self.GIT_CLIENT.switchBranch(branch_2, create=False)
+        self.assertEqual(branch_2, self.get_current_branch_name())
 
         self.info("Use switchBranch with (non existing branch name, create=False)")
         with self.assertRaises(Exception) as error:
