@@ -30,14 +30,16 @@ class TestGitClient(BaseTest):
         with open("/{}/README.md".format(cls.GIT_REPO), "a") as out:
             out.write("README.md" + "\n")
         cls.os_command("cd {} && git add README.md".format(cls.GIT_REPO))
+
         cls.os_command('git config --global user.email "{}"'.format(cls.user_email))
         cls.os_command('git config --global user.name "{}"'.format(cls.user_name))
+
         cls.os_command('cd {} && git commit -m "first commit"'.format(cls.GIT_REPO))
 
         cls.info("Push new changes to the remote git repo")
         cls.os_command(
-            "git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
-                cls.user_name, cls.user_passwd, cls.user_name, cls.REPO_NAME
+            "cd {} && git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
+                cls.GIT_REPO, cls.user_name, cls.user_passwd, cls.user_name, cls.REPO_NAME
             )
         )
 
@@ -61,6 +63,8 @@ class TestGitClient(BaseTest):
         cls.info("Remove remote repo")
         repo = cls.github_client.repo_get(cls.REPO_NAME)
         cls.github_client.repo_delete(repo)
+
+        cls.os_command("rm -rf /tmp/{}".format(cls.REPO_NAME))
 
         cls.info("Remove git repo directory")
         cls.os_command("rm -rf {}".format(cls.REPO_DIR))
@@ -110,7 +114,7 @@ class TestGitClient(BaseTest):
         #. Create two files in a git repo directory.
         #. Add one of those two file, using addfiles method.
         #. Make sure that this file is added correctly.
-        #. Try to add non existing file, should return an error.
+        #. Try to add non existing file, should raise an error.
         """
         FILE_1, FILE_2 = self.create_two_files()
 
@@ -121,7 +125,7 @@ class TestGitClient(BaseTest):
         output, error = self.os_command("cd {} && git ls-files".format(self.GIT_REPO))
         self.assertIn("{}".format(FILE_1), output.decode())
 
-        self.info("Try to add non existing file, should return an error")
+        self.info("Try to add non existing file, should raise an error")
         with self.assertRaises(Exception) as error:
             self.GIT_CLIENT.addFiles(files=[self.RANDOM_NAME])
             self.assertTrue("No such file or directory" in error.exception.args[0])
@@ -269,7 +273,8 @@ class TestGitClient(BaseTest):
         #. Use getBranchOrTag, and describe method to get the tag name.
         #. Add new files and commit.
         #. Use getBranchOrTag method to get the branch name.
-        #. Use describe method and check the output.
+        #. Use describe method, and check the output something look like this.
+            "tag", "1.0-1-gCOMMIT_ID\n"
         """
         self.info("Use describe to check the branch name")
         current_branch = self.get_current_branch_name()
@@ -339,6 +344,12 @@ class TestGitClient(BaseTest):
         """
         TC 547
         Test to get the modified files.
+        NOTE:
+            - we can use collapse=(True or False) by default it's False, if we use collapse=True
+            the output will be printed in a list, but if we use collapse=False the output will be the list of modified
+            files separated in dict of 4 lists
+            {'D': [], 'N': [], 'M': [], 'R': []}, where D:deleted, N:new, M:modified, R:renamed.
+            - Also, we have ignore, for files to ignore.
 
         **Test scenario**
         #. Create two files (FILE_1, FILE_2) in a git repo directory.
@@ -365,12 +376,13 @@ class TestGitClient(BaseTest):
     def test010_has_modified_files(self):
         """
         TC 548
-        Test the existing of modified files.
+        Test hasModifiedFiles which returns True if there is any file modified, new, renamed, or deleted and
+        has not been yet committed, False otherwise.
 
         **Test scenario**
         #. Create two files in a git repo directory.
         #. Use hasModifiedFiles to check the output, should be True.
-        #. Add those files and recheck again, the output should be false.
+        #. Add those files and recheck, the output should be false.
         """
         FILE_1, FILE_2 = self.create_two_files()
 
@@ -391,6 +403,7 @@ class TestGitClient(BaseTest):
         **Test scenario**
         #. Make sure that .gitignore file doesn't exist.
         #. Use patchGitignore method and check if .gitignore file is created.
+        #. Remove .gitignore file
         """
         self.info("Make sure that .gitignore file doesn't exist")
         self.assertFalse(os.path.isfile("{}/.gitignore".format(self.GIT_REPO)))
@@ -399,48 +412,48 @@ class TestGitClient(BaseTest):
         self.GIT_CLIENT.patchGitignore()
         self.assertTrue(os.path.isfile("{}/.gitignore".format(self.GIT_REPO)))
 
-    @unittest.skip("skip push")
+        self.info("Remove .gitignore file")
+        os.remove("{}/.gitignore".format(self.GIT_REPO))
+
     def test012_pull(self):
         """
         TC 552
         Test pull from the remote repo.
 
         **Test scenario**
-        #. Create 2 files (File_1, File_2).
+        #. Clone the remote directory in /tmp/.
+        #. Create a file in the new cloned repo and commit, then push.
+        #. Pull the latest changes in the old git client repo.
+        #. Check the existing of the files in the old repo.
+        #. Create 2 files.
         #. Commit the two files.
-        #. Push the local changes to the remote repo.
-        #. Reset to old Commit ID, make sure that (File_1, File_2) files don't exist anymore.
-        #. Pull the latest changes.
-        #. Recheck the existing of (File_1, File_2) files in the local repo.
-        #. Create 2 files (File_3, File_4).
-        #. Use pull method with files waiting to commit, should raise an Exception
+        #. Use pull method with files waiting to commit, should raise an Exception.
         """
-        self.info("Create 2 files (File_1, File_2)")
-        File_1, File_2 = self.create_two_files()
 
-        self.info("Commit the two files")
-        self.GIT_CLIENT.commit("Add the two files")
+        self.info("Clone the remote directory in /tmp/")
+        self.os_command("cd /tmp/ && git clone https://github.com/{}/{}.git".format(self.user_name, self.REPO_NAME))
 
-        self.info("Push the local changes to the remote repo")
+        self.info("Create a file in the new directory and commit, then push")
+        FILE = self.RANDOM_NAME
+        self.os_command("cd /tmp/{} && touch {}".format(self.REPO_NAME, FILE))
+
+        self.os_command('cd /tmp/{} && git add {} && git commit -m "third file"'.format(self.REPO_NAME, FILE))
         self.os_command(
-            "git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
-                self.user_name, self.user_passwd, self.user_name, self.REPO_NAME
+            "cd /tmp/{} && git push -u 'https://{}:{}@github.com/{}/{}.git' master".format(
+                self.REPO_NAME, self.user_name, self.user_passwd, self.user_name, self.REPO_NAME
             )
         )
-
-        self.info("Reset to old Commit ID, make sure that (File_1, File_2) files don't exist anymore")
-        self.os_command("cd {} && git reset --hard {}".format(self.GIT_REPO, self.C_ID))
 
         self.info("Pull the latest changes")
         self.GIT_CLIENT.pull()
 
-        self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, File_1)))
-        self.assertFalse(os.path.isfile("{}/{}".format(self.GIT_REPO, File_2)))
+        self.info("Check that the new created created file is existing after pull")
+        self.assertTrue(os.path.isfile("{}/{}".format(self.GIT_REPO, FILE)))
 
         self.info("Create 2 files")
         self.create_two_files()
 
-        self.info("Commit the two files (File_3, File_4)")
+        self.info("Commit the two files")
         self.GIT_CLIENT.commit("Add the two files")
 
         self.info("Use pull method with files waiting to commit, should raise an Exception")
@@ -449,7 +462,7 @@ class TestGitClient(BaseTest):
             self.assertTrue("files waiting to commit" in error.exception.args[0])
 
     @unittest.skip("should run manually")
-    def push(self):
+    def test013_push(self):
         """
         TC 553
 
@@ -459,7 +472,7 @@ class TestGitClient(BaseTest):
         #. Push changes to the remote repo, using push method.
         """
         self.info("Create 2 files (File_1, File_2)")
-        File_1, File_2 = self.create_two_files()
+        self.create_two_files()
 
         self.info("Commit the two files")
         self.GIT_CLIENT.commit("Add the two files")
@@ -467,7 +480,7 @@ class TestGitClient(BaseTest):
         self.info("Push changes to the remote repo, using push method")
         self.GIT_CLIENT.push()
 
-    def test013_remove_files(self):
+    def test014_remove_files(self):
         """
         TC 555
         Test remove files from git repo.
@@ -490,7 +503,7 @@ class TestGitClient(BaseTest):
             self.GIT_CLIENT.removeFiles(files=[self.RANDOM_NAME])
             self.assertTrue("did not match any files" in error.exception.args[0])
 
-    def test014_setConfig_and_unset_config(self):
+    def test015_setConfig_and_unset_config(self):
         """
         TC 556
         Test set and unset new config values to certain config fields.
@@ -512,7 +525,7 @@ class TestGitClient(BaseTest):
         self.info("Unset the email")
         self.GIT_CLIENT.unsetConfig("user.email", local=False)
 
-    def test015_set_remote_urL(self):
+    def test016_set_remote_urL(self):
         """
         TC 557
         Test set remote url which change remote URL from HTTPS to SSH.
@@ -534,7 +547,7 @@ class TestGitClient(BaseTest):
         self.info("Reset remote URL to HTTPS again")
         self.GIT_CLIENT.setRemoteURL("https://github.com/tfttesting/new_test_test.git")
 
-    def test016_switch_branch(self):
+    def test017_switch_branch(self):
         """
         TC 558
         Test switch branch in git repo.
