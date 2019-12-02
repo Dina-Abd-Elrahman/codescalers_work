@@ -19,6 +19,10 @@ class BaseTest(unittest.TestCase):
         return output, error
 
     @staticmethod
+    def rand_num(start=100, stop=1000):
+        return j.data.idgenerator.generateRandomInt(start, stop)
+
+    @staticmethod
     def rand_string(size=10):
         return str(uuid.uuid4()).replace("-", "")[1:10]
 
