@@ -5,7 +5,6 @@ from testconfig import config
 from base_test import BaseTest
 
 
-@unittest.skip
 class MailClient(BaseTest):
 
     username = config["mail"]["username"]
@@ -14,7 +13,13 @@ class MailClient(BaseTest):
     def setUp(self):
         self.info("Create Mail client")
         self.RAND_STRING = self.rand_string()
-        self.mail_client = j.clients.email.new(self.RAND_STRING, smtp_server="smtp.gmail.com", smtp_port=587)
+        self.mail_client = j.clients.email.new(
+            self.RAND_STRING,
+            smtp_server="smtp.gmail.com",
+            smtp_port=587,
+            Email_from=self.username,
+            password=self.password,
+        )
 
     def tearDown(self):
         self.info("Delete Mail client")
@@ -81,4 +86,4 @@ class MailClient(BaseTest):
         )
 
         self.info("Make sure that message has been sent correctly, and check the existing of the file")
-        self.assertTrue(self.check_inbox("attachment; filename=test_{}".format(RAND_NUM)))
+        self.assertTrue(self.check_inbox('attachment; filename="test_{}"'.format(RAND_NUM)))
