@@ -20,10 +20,10 @@ class MailClient(BaseTest):
         self.info("Delete Mail client")
         self.mail_client.delete()
 
-    def check_inbox(self, message_subject):
+    def check_inbox(self, data_query):
         """
         Check inbox in the email to make sure that my message has been sent correctly.
-        :param message_subject: message subject.
+        :param data_query: message subject.
         """
         mail = imaplib.IMAP4_SSL("smtp.gmail.com")
         mail.login(self.username, self.password)
@@ -34,7 +34,7 @@ class MailClient(BaseTest):
         latest_email_id = int(id_list[-1])
         for i in range(latest_email_id, latest_email_id - 10, -1):
             status, data = mail.fetch(str(i), "(RFC822)")
-            if message_subject in str(data[0][1]):
+            if data_query in str(data[0][1]):
                 return True
         return False
 
