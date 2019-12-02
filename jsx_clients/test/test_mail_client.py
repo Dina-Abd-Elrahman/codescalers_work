@@ -36,7 +36,7 @@ class MailClient(BaseTest):
             status, data = mail.fetch(str(i), "(RFC822)")
             if message_subject in str(data[0][1]):
                 return True
-                break
+        return False
 
     def test001_send_mail(self):
         """
