@@ -1,5 +1,4 @@
 import imaplib
-import unittest
 from Jumpscale import j
 from testconfig import config
 from base_test import BaseTest
