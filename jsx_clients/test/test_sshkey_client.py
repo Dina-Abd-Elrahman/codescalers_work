@@ -1,4 +1,3 @@
-import uuid
 import os.path
 from Jumpscale import j
 from base_test import BaseTest
@@ -7,8 +6,8 @@ from base_test import BaseTest
 class TestSshKeyClient(BaseTest):
 
     def setUp(self):
-        self.SSHKEYCLIENT_NAME = str(uuid.uuid4()).replace("-", "")[:10]
-        self.info("create sshkey client with name {}".format(self.SSHKEYCLIENT_NAME))
+        self.SSHKEYCLIENT_NAME = "ssh_client_{}".format(self.rand_string())
+        self.info("Create sshkey client with name {}".format(self.SSHKEYCLIENT_NAME))
         self.sshkey_client = j.clients.sshkey.get(name=self.SSHKEYCLIENT_NAME)
         self.ssh_pubkey = self.sshkey_client.pubkey
         self.ssh_privkey = self.sshkey_client.privkey
@@ -21,11 +20,11 @@ class TestSshKeyClient(BaseTest):
         self.delete_client_method(self.sshkey_client, "jumpscale.sshkey.client", self.SSHKEYCLIENT_NAME)
 
     def delete_from_sshdir(self):
-        self.info("check delete_from_sshdir method in sshkey client")
+        self.info("Check delete_from_sshdir method in sshkey client")
         self.sshkey_client.delete_from_sshdir()
-        self.info("check that sshkey_client files are deleted from ssh directory")
-        if not (os.path.isfile('/root/.ssh/{}.pub'.format(self.SSHKEYCLIENT_NAME))
-                and os.path.isfile('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME))):
+        self.info("Check that sshkey_client files are deleted from ssh directory")
+        if not (os.path.isfile('{}/.ssh/{}.pub'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME))
+                and os.path.isfile('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME))):
             return True
         else:
             return False
@@ -33,12 +32,13 @@ class TestSshKeyClient(BaseTest):
     def test001_load_from_filesystem(self):
         """
         TC 469
-        Test case for load_from_filesystem method in sshkey client
+        Test load_from_filesyatem method which load ssh key files (public and private) keys from my filesystem to
+        database bcdb.
 
         **Test scenario**
-        #. use delete first to delete the client from data base and check for the existence (it should be removed)
-        #. use load_from_filesystem method to save it again to database
-        #. check client existence
+        #. Use delete first to delete the client from database and check for the existence of it (it should be removed).
+        #. Use load_from_filesystem method to save it again to database
+        #. Check client existence
         """
         self.info("use delete_client_method to delete {} client".format(self.sshkey_client))
         self.assertTrue(self.delete_client_method(self.sshkey_client, "jumpscale.sshkey.client",
@@ -49,50 +49,45 @@ class TestSshKeyClient(BaseTest):
         model = j.data.bcdb.system.model_get(url="jumpscale.sshkey.client")
         self.assertTrue(model.get_by_name(name=self.SSHKEYCLIENT_NAME))
 
-    def test02_generate_key_reset_False(self):
+    def test02_generate_key(self):
         """
         TC 470
-        Test case for generate method with option (reset=False)
+        Test generate method which regenerates the sshkey.
 
         **Test scenario**
-        #. try to use generate method with option reset=False to regenerate the sshkey, should fail as it's generated
-           before in sshkey client generation.
+        #. Try generate method with option reset=False, should fail as it's generated
+        before in sshkey client generation.
+        #. Use generate method with option reset=True, this will regenerate the key.
+        #. Check the existence of the new key, and make sure that keys are new ones.
         """
-        self.info("try generate method with option reset=True")
-        with self.assertRaises(Exception):
+        self.info("Try generate method with option reset=True")
+        with self.assertRaises(Exception) as error:
             self.sshkey_client.generate(reset=False)
+            self.assertTrue("cannot generate key because pubkey already known" in error.exception.args[0])
 
-    def test003_generate_key_reset_True(self):
-        """
-        TC 471
-        Test case to test generate method with option reset=True in sshkey client
-
-        **Test scenario**
-        #. use generate method with option reset=True, this will regenerate the key.
-        #. check the existence of the new key, and make sue that it's new one.
-        """
-        self.info("check generate method with option reset=True")
+        self.info("Use generate method with option reset=True, this will regenerate the key")
         self.sshkey_client.generate(reset=True)
-        self.info("check that sshkey_client files are in ssh directory, and with the new values")
-        self.assertTrue(os.path.isfile('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME)))
-        self.assertTrue(os.path.isfile('/root/.ssh/{}.pub'.format(self.SSHKEYCLIENT_NAME)))
+        self.info("Check the existence of the new key, and make sure that keys are new ones")
+        self.assertTrue(os.path.isfile('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)))
+        self.assertTrue(
+            os.path.isfile('{}/.ssh/{}.pub'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)))
         old_privkey = self.ssh_privkey
-        new_privkey = open('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME)).read()
+        new_privkey = open('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)).read()
         old_pubkey = self.ssh_pubkey
-        new_pubkey = open('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME)).read()
+        new_pubkey = open('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)).read()
         self.assertNotEqual(old_pubkey, new_pubkey)
         self.assertNotEqual(old_privkey, new_privkey)
 
     def test004_delete_from_sshdir(self):
         """
         TC 473
-        Test case for delete_from_sshdir method in sshkey client
+        Test delete_from_sshdir method, which delete sshkey files locally from ssh directory.
 
         **Test scenario**
-        #. use delete_from_sshdir to delete the sshkey_client files from ssh directory.
-        #. check the existence of those files public and private key files in the sshkey directory.
+        #. Use delete_from_sshdir to delete the sshkey_client files from ssh directory.
+        #. Check the existence of those public and private key files in the sshkey directory.
         """
-        self.info("use delete_from_sshdir to delete the sshkey_client files from ssh directory.")
+        self.info("Use delete_from_sshdir to delete the sshkey_client files from ssh directory.")
         self.assertTrue(self.delete_from_sshdir())
 
     def test005_write_to_sshdir(self):
@@ -111,26 +106,30 @@ class TestSshKeyClient(BaseTest):
         self.info("check write_to_sshdir method in sshkey client")
         self.sshkey_client.write_to_sshdir()
         self.info("check that sshkey_client public and private files are in ssh directory")
-        self.assertTrue(os.path.isfile('/root/.ssh/{}.pub'.format(self.SSHKEYCLIENT_NAME)))
-        self.assertTrue(os.path.isfile('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME)))
+        self.assertTrue(
+            os.path.isfile('{}/.ssh/{}.pub'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)))
+        self.assertTrue(os.path.isfile('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)))
         self.info("check the public and private keys values,  should be the same as before")
-        self.assertEqual(self.ssh_pubkey, open('/root/.ssh/{}.pub'.format(self.SSHKEYCLIENT_NAME)).read())
-        self.assertEqual(self.ssh_privkey, open('/root/.ssh/{}'.format(self.SSHKEYCLIENT_NAME)).read())
+        self.assertEqual(
+            self.ssh_pubkey,
+            open('{}/.ssh/{}.pub'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)).read())
+        self.assertEqual(
+            self.ssh_privkey, open('{}/.ssh/{}'.format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME)).read())
 
     def test006_load(self):
         """
         TC 475
-        Test case for load method in sshkey client
+        Test load method which loads sshkey in ssh agent.
 
         **Test scenario**
-        #. use load method to to load the sshkey in sshkey agent.
+        #. use load method to to load the sshkey in ssh agent.
         #. check the key is loaded or not from the output of the command (ssh-add -l)
         """
         self.info("check load method")
         self.sshkey_client.load()
         self.info("check the output of ssh-add -l")
         output, error = self.os_command("ssh-add -l")
-        self.assertIn("/root/.ssh/{}".format(self.SSHKEYCLIENT_NAME), output.decode())
+        self.assertIn("{}/.ssh/{}".format(j.core.myenv.config["DIR_HOME"], self.SSHKEYCLIENT_NAME), output.decode())
         self.assertFalse(error)
 
     def test007_unload(self):
@@ -146,6 +145,8 @@ class TestSshKeyClient(BaseTest):
         self.sshkey_client.unload()
         self.info("check is_loaded method in sshkey, output should be false")
         self.assertFalse(self.sshkey_client.is_loaded())
+        output, error = self.os_command('ssh-add -l')
+        self.assertNotIn(self.SSHKEYCLIENT_NAME, output.decode())
 
     def test008_is_loaded(self):
         """
