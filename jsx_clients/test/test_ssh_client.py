@@ -210,7 +210,8 @@ class SshClient(BaseTest):
     def test008_upload_with_valid_source_valid_dest_none_ignoredir_none_ignorefiles_recursive_True(self):
         """
         TC 491
-        Test upload method in ssh client with none ignorefiles, none ignoredir, and recursive=True.
+        Test upload method in ssh client which upload files from local machine to remote one
+        with none ignorefiles, none ignoredir, and recursive=True.
 
         **Test scenario**
         #. Create a file in a directory in a local machine, with certain file name.
@@ -234,7 +235,8 @@ class SshClient(BaseTest):
     def test009_upload_with_valid_source_valid_dest_none_ignoredir_none_ignorefiles_recursive_False(self):
         """
         TC 506
-        Test upload method in ssh client with none ignorefiles, none ignoredir, and recursive=False.
+        Test upload method in ssh client which upload files from local machine to remote one
+        with none ignorefiles, none ignoredir, and recursive=False.
 
         **Test scenario**
         #. Create a files in a directory in local machine, with certain file name.
