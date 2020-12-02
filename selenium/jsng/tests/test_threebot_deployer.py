@@ -36,11 +36,11 @@ class ThreebotDeployerTests(BaseTest):
         self.info("Create a threebot instance")
         threebot_name = "threebot_{}".format(randint(1, 1000))
         password = randint(1, 500000)
-        threbot_instance_url = self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name,
-                                                                      password=password, wallet_name=wallet_name)
+        threebot_instance_url = self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name,
+                                                                       password=password, wallet_name=wallet_name)
 
         self.info("Check that the threebot instance has been created successfully")
-        self.assertEqual(urllib.request.urlopen(threbot_instance_url).getcode(), 200)
+        self.assertEqual(urllib.request.urlopen(threebot_instance_url).getcode(), 200)
 
         my_3bot_instances = self.threebot_deployer.view_my_3bot("RUNNING")
         self.assertIn(threebot_name, my_3bot_instances)
@@ -80,7 +80,8 @@ class ThreebotDeployerTests(BaseTest):
         self.info("Create a 3bot instance")
         threebot_name = "threebot_{}".format(randint(1, 1000))
         password = randint(1, 500000)
-        self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name, password=password, wallet_name=wallet_name)
+        self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name, password=password,
+                                               wallet_name=wallet_name)
 
         self.info("Stopped the new created 3bot instance")
         self.stop_running_3bot_instance(my_3bot_instance_name=threebot_name, password=password)
