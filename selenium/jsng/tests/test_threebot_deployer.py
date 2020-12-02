@@ -3,7 +3,7 @@ import urllib.request
 from random import randint
 from tests.frontend.tests.base_tests import BaseTest
 from tests.frontend.pages.wallets.wallets import Wallets
-from tests.frontend.pages.threebot_deployer import ThreebotDeployer
+from tests.frontend.pages.threebot_deployer.threebot_deployer import ThreebotDeployer
 
 
 @pytest.mark.integration
