@@ -20,10 +20,38 @@ class ThreebotDeployer(Base):
         wait = WebDriverWait(self.driver, 60)
         wait.until(EC.invisibility_of_element_located((By.CLASS_NAME, class_name)))
 
+    def view_an_existing_3bot_button(self):
+        view_my_existing_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[2]
+        view_my_existing_3bot_button.click()
+
+    def switch_driver_to_iframe(self):
+        # switch driver to iframe
+        self.wait("v-progress-linear__buffer")
+        iframe = self.driver.find_elements_by_tag_name("iframe")[0]
+        self.driver.switch_to_frame(iframe)
+
     def click_button(self, text):
         buttons = self.driver.find_elements_by_class_name("v-btn")
         next_button = [button for button in buttons if button.text == text][0]
         next_button.click()
+
+    def find_correct_3bot_instance(self, action, my_3bot_instance_name):
+        # Find correct 3bot instance row
+        self.wait("v-progress-linear__buffer")
+        table_box = self.driver.find_element_by_class_name("v-data-table")
+        table = table_box.find_element_by_tag_name("table")
+        rows = table.find_elements_by_tag_name("tr")
+
+        if action == "delete":
+            i = 2
+        else:
+            i = 0
+        for row in rows:
+            if row.text.split()[0] == my_3bot_instance_name:
+                row.find_elements_by_class_name("v-btn__content")[i].click()
+                break
+            else:
+                return
 
     def payment_process(self, wallet_name):
         chat_box = self.driver.find_element_by_class_name("chat")
@@ -39,14 +67,12 @@ class ThreebotDeployer(Base):
                                                 memo_text=reservation_ID, asset=f"{a.code}:{a.issuer}")
 
     def deploy_new_3bot(self, my_3bot_instances, password, wallet_name):
-        # Deploy a new 3bot
+        # Deploy a new 3bot button
         deploy_new_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[1]
         deploy_new_3bot_button.click()
 
         # switch driver to iframe
-        self.wait("v-progress-linear__buffer")
-        iframe = self.driver.find_elements_by_tag_name("iframe")[0]
-        self.driver.switch_to_frame(iframe)
+        self.switch_driver_to_iframe()
 
         # Create a new 3Bot instance
         chat_box = self.driver.find_element_by_class_name("chat")
@@ -109,9 +135,8 @@ class ThreebotDeployer(Base):
 
     def view_my_3bot(self, status):
 
-        # view an existing 3bot
-        view_my_existing_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[2]
-        view_my_existing_3bot_button.click()
+        # View an existing 3bot button
+        self.view_an_existing_3bot_button()
 
         self.wait("progressbar")
 
@@ -135,22 +160,11 @@ class ThreebotDeployer(Base):
 
     def delete_threebot_instance(self, my_3bot_instance_name, password):
 
-        # view an existing 3bot
-        view_my_existing_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[2]
-        view_my_existing_3bot_button.click()
+        # View an existing 3bot button
+        self.view_an_existing_3bot_button()
 
         # Find correct 3bot instance row
-        self.wait("v-progress-linear__buffer")
-        table_box = self.driver.find_element_by_class_name("v-data-table")
-        table = table_box.find_element_by_tag_name("table")
-        rows = table.find_elements_by_tag_name("tr")
-
-        for row in rows:
-            if row.text.split()[0] == my_3bot_instance_name:
-                row.find_elements_by_class_name("v-btn__content")[2].click()
-                break
-            else:
-                return
+        self.find_correct_3bot_instance("delete", my_3bot_instance_name=my_3bot_instance_name)
 
         # Destroy 3bot box
         destroy_3bot = self.driver.find_element_by_class_name("v-card")
@@ -164,27 +178,14 @@ class ThreebotDeployer(Base):
 
     def start_stopped_3bot_instance(self, my_3bot_instance_name, password, wallet_name):
 
-        # view an existing 3bot
-        view_my_existing_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[2]
-        view_my_existing_3bot_button.click()
+        # View an existing 3bot button
+        self.view_an_existing_3bot_button()
 
         # Find correct 3bot instance row
-        self.wait("v-progress-linear__buffer")
-        table_box = self.driver.find_element_by_class_name("v-data-table")
-        table = table_box.find_element_by_tag_name("table")
-        rows = table.find_elements_by_tag_name("tr")
-
-        for row in rows:
-            if row.text.split()[0] == my_3bot_instance_name:
-                row.find_elements_by_class_name("v-btn__content")[0].click()
-                break
-            else:
-                return
+        self.find_correct_3bot_instance("start", my_3bot_instance_name=my_3bot_instance_name)
 
         # switch driver to iframe
-        self.wait("v-progress-linear__buffer")
-        iframe = self.driver.find_elements_by_tag_name("iframe")[0]
-        self.driver.switch_to_frame(iframe)
+        self.switch_driver_to_iframe()
 
         password_chat_box = self.driver.find_element_by_class_name("chat")
         input_password = password_chat_box.find_element_by_tag_name("input")
@@ -208,28 +209,15 @@ class ThreebotDeployer(Base):
 
     def stop_running_3bot_instance(self, my_3bot_instance_name, password):
 
-        # view an existing 3bot
-        view_my_existing_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[2]
-        view_my_existing_3bot_button.click()
+        # View an existing 3bot button
+        self.view_an_existing_3bot_button()
 
         # Find correct 3bot instance row
-        self.wait("v-progress-linear__buffer")
-        table_box = self.driver.find_element_by_class_name("v-data-table")
-        table = table_box.find_element_by_tag_name("table")
-        rows = table.find_elements_by_tag_name("tr")
-
-        for row in rows:
-            if row.text.split()[0] == my_3bot_instance_name:
-                row.find_elements_by_class_name("v-btn__content")[0].click()
-                break
-            else:
-                return
+        self.find_correct_3bot_instance("stop", my_3bot_instance_name=my_3bot_instance_name)
 
         password_chat_box = self.driver.find_element_by_class_name("v-card")
         input_password = password_chat_box.find_element_by_tag_name("input")
         input_password.send_keys(password)
 
         self.click_button("CONFIRM")
-
         self.wait("v-progress-linear__buffer")
-
