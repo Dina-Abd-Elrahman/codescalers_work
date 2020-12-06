@@ -1,6 +1,7 @@
 import pytest
 import urllib.request
 from random import randint
+from jumpscale.loader import j
 from tests.frontend.tests.base_tests import BaseTest
 from tests.frontend.pages.wallets.wallets import Wallets
 from tests.frontend.pages.threebot_deployer.threebot_deployer import ThreebotDeployer
@@ -9,10 +10,32 @@ from tests.frontend.pages.threebot_deployer.threebot_deployer import ThreebotDep
 @pytest.mark.integration
 class ThreebotDeployerTests(BaseTest):
 
+    wallet_name = "wallet_{}".format(randint(1, 500))
+
+    @classmethod
+    def setDownClass(cls):
+        super().setDownClass()
+        # Check if threebot-deployer package is installed, if not please install.
+        packages_list = j.servers.threebot.default.packages.list_all()
+        if "threebot_deployer" not in packages_list:
+            from jumpscale.packages import threebot_deployer
+
+            path = j.sals.fs.dirname(threebot_deployer.__file__)
+            j.servers.threebot.default.packages.add(path)
+
     def setUp(self):
         super().setUp()
+        if not hasattr(ThreebotDeployerTests, "wallet_name"):
+            self.wallet_name = self.random_name()
+            self.create_wallet(self.wallet_name)
+
         self.threebot_deployer = ThreebotDeployer(self.driver)
         self.threebot_deployer.load()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.delete_wallet(wallet_name=cls.wallet_name)
+        super().tearDownClass()
 
     def test01_deploy_and_delete_3bot(self):
         """
@@ -26,18 +49,14 @@ class ThreebotDeployerTests(BaseTest):
         #. Delete the threebot instance.
         #. Check that the threebot instance has been deleted successfully.
         """
-
         self.info("Create a wallet")
-        wallet_name = "wallet_{}".format(randint(1, 5000))
-        wallets = Wallets(self.driver)
-        wallets.load()
-        wallets.add_funded(wallet_name)
 
         self.info("Create a threebot instance")
-        threebot_name = "threebot_{}".format(randint(1, 1000))
+        threebot_name = "threebot{}".format(randint(1, 1000))
         password = randint(1, 500000)
-        threebot_instance_url = self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name,
-                                                                       password=password, wallet_name=wallet_name)
+        threebot_instance_url = self.threebot_deployer.deploy_new_3bot(
+            my_3bot_instances=threebot_name, password=password, wallet_name=self.wallet_name
+        )
 
         self.info("Check that the threebot instance has been created successfully")
         self.assertEqual(urllib.request.urlopen(threebot_instance_url).getcode(), 200)
@@ -46,8 +65,6 @@ class ThreebotDeployerTests(BaseTest):
         self.assertIn(threebot_name, my_3bot_instances)
 
         self.info("Delete the wallet")
-        wallets.load()
-        wallets.delete(wallet_name)
 
         self.info("Delete the threebot instance")
         self.threebot_deployer.delete_threebot_instance(my_3bot_instances=threebot_name, password=password)
@@ -72,16 +89,13 @@ class ThreebotDeployerTests(BaseTest):
         """
 
         self.info("Create a wallet")
-        wallet_name = "wallet_{}".format(randint(1, 5000))
-        wallets = Wallets(self.driver)
-        wallets.load()
-        wallets.add_funded(wallet_name)
 
         self.info("Create a 3bot instance")
-        threebot_name = "threebot_{}".format(randint(1, 1000))
+        threebot_name = "threebot{}".format(randint(1, 1000))
         password = randint(1, 500000)
-        self.threebot_deployer.deploy_new_3bot(my_3bot_instance_name=threebot_name, password=password,
-                                               wallet_name=wallet_name)
+        self.threebot_deployer.deploy_new_3bot(
+            my_3bot_instance_name=threebot_name, password=password, wallet_name=self.wallet_name
+        )
 
         self.info("Stopped the new created 3bot instance")
         self.stop_running_3bot_instance(my_3bot_instance_name=threebot_name, password=password)
@@ -91,8 +105,9 @@ class ThreebotDeployerTests(BaseTest):
         self.assertIn(threebot_name, my_3bot_instances)
 
         self.info("Start the 3bot instance")
-        threebot_instance_url = self.start_stopped_3bot_instance(my_3bot_instance_name=threebot_name, password=password,
-                                                                 wallet_name=wallet_name)
+        threebot_instance_url = self.start_stopped_3bot_instance(
+            my_3bot_instance_name=threebot_name, password=password, wallet_name=self.wallet_name
+        )
 
         self.info("Check that the 3bot instance has been started successfully")
         self.assertEqual(urllib.request.urlopen(threebot_instance_url).getcode(), 200)
@@ -103,5 +118,15 @@ class ThreebotDeployerTests(BaseTest):
         self.threebot_deployer.delete_threebot_instance(my_3bot_instances=threebot_name, password=password)
 
         self.info("Delete the wallet")
+
+    def create_wallet(self, wallet_name):
+        self.info("Create a wallet")
+        wallets = Wallets(self.driver)
+        wallets.load()
+        wallets.add_funded(wallet_name)
+
+    def delete_wallet(self, wallet_name):
+        self.info("Delete the wallet")
+        wallets = Wallets(self.driver)
         wallets.load()
         wallets.delete(wallet_name)

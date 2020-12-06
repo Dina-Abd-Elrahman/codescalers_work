@@ -63,16 +63,20 @@ class ThreebotDeployer(Base):
         total_amount = payment_info[9].split()[0]
 
         a = getattr(j.clients.stellar, wallet_name).get_asset(currency)
-        j.clients.stellar.demos_wallet.transfer(destination_wallet_address, amount=total_amount,
-                                                memo_text=reservation_ID, asset=f"{a.code}:{a.issuer}")
+        j.clients.stellar.demos_wallet.transfer(
+            destination_wallet_address, amount=total_amount, memo_text=reservation_ID, asset=f"{a.code}:{a.issuer}"
+        )
 
     def deploy_new_3bot(self, my_3bot_instances, password, wallet_name):
         # Deploy a new 3bot button
         deploy_new_3bot_button = self.driver.find_elements_by_class_name("v-btn__content")[1]
         deploy_new_3bot_button.click()
 
+        self.wait("v-progress-linear__buffer")
+
         # switch driver to iframe
-        self.switch_driver_to_iframe()
+        iframe = self.driver.find_elements_by_tag_name("iframe")[0]
+        self.driver.switch_to_frame(iframe)
 
         # Create a new 3Bot instance
         chat_box = self.driver.find_element_by_class_name("chat")
@@ -88,7 +92,8 @@ class ThreebotDeployer(Base):
 
         self.click_button("NEXT")
 
-        self.wait("v-progress-circular")
+        self.wait("progressbar")
+        self.wait("progressbar")
 
         # Choose how much resources the deployed solution will use.
         # We use 1 CPU, 2GB Memory, and 2GB[SSD] in this example.
@@ -112,6 +117,7 @@ class ThreebotDeployer(Base):
         instance_location_selection.click()
 
         self.click_button("NEXT")
+        self.wait("v-progress-circular")
         self.click_button("NEXT")
 
         self.wait("v-progress-circular")
