@@ -1,12 +1,11 @@
 import pytest
 from random import randint
-from tests.frontend.pages.workloads import workloads
+from tests.frontend.pages.workloads.workloads import workloads
 from tests.frontend.tests.base_tests import BaseTest
 
 
 @pytest.mark.integration
 class WorkloadsTests(BaseTest):
-
     def setUp(self):
         super().setUp()
         self.workloads = workloads(self.driver)
@@ -28,5 +27,6 @@ class WorkloadsTests(BaseTest):
         self.workloads.delete_selected_workloads(workload_ID)
 
         self.info("Check that selected workload has been deleted correctly")
-        worklods_status = self.workloads.check_selected_workloads_status(workload_name)
+        self.workloads.load()
+        worklods_status = self.workloads.check_selected_workloads_status(workload_ID)
         self.assertEquals(worklods_status, "DELETED")
