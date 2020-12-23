@@ -14,7 +14,8 @@ class Packages(Base):
         url = urljoin(self.base_url, self.endpoint)
         self.driver.get(url)
 
-    def add_threebot_deployer_package_if_not_added(self):
+    def add_threebot_deployer_package(self):
+        # This function to add threebot deployer packages if not added
         threebot_installed = False
         installed_packages, available_packages = self.get_installed_and_available_packages()
         if "threebot_deployer" not in installed_packages.keys():
