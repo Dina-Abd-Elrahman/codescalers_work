@@ -1,17 +1,23 @@
 import pytest
 import subprocess
 from random import randint
-from solutions_automation.dashboard_solutions.network import NetworkDeployAutomated
-from solutions_automation.dashboard_solutions.pools import PoolAutomated
-from tests.frontend.pages.solutions.network import Network
-from tests.frontend.pages.solutions.ubuntu import Ubuntu
+from jumpscale.loader import j
 from tests.frontend.tests.base_tests import BaseTest
+from tests.frontend.pages.solutions.ubuntu import Ubuntu
+from tests.frontend.pages.solutions.network import Network
+from solutions_automation.dashboard_solutions.pools import PoolAutomated
+from solutions_automation.dashboard_solutions.network import NetworkDeployAutomated
 
 
 @pytest.mark.integration
 class SolutionsTests(BaseTest):
 
     solution_name = "solution{}".format(randint(1, 5000))
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        j.clients.stellar.create_testnet_funded_wallet(cls.solution_name)
 
     def setUp(self):
         super().setUp()
@@ -37,6 +43,11 @@ class SolutionsTests(BaseTest):
             time_to_live=1,
             debug=True,
         )
+
+    @classmethod
+    def tearDownClass(cls):
+        j.clients.stellar.delete(cls.solution_name)
+        super().tearDownClass()
 
     @staticmethod
     def os_command(command):

@@ -21,7 +21,7 @@ class Ubuntu(Base):
         iframe = self.driver.find_elements_by_tag_name("iframe")[0]
         self.driver.switch_to_frame(iframe)
 
-    def find(name, path):
+    def find(self, name, path):
         for root, dirs, files in os.walk(path):
             if name in files:
                 return os.path.join(root, name)
@@ -69,7 +69,7 @@ class Ubuntu(Base):
             sleep(0.5)
         pools = pools_list.find_elements_by_class_name("v-list-item__content")
         for pool in pools:
-            if name in pool.text:
+            if solution_name in pool.text:
                 pool.click()
                 break
 
@@ -89,7 +89,7 @@ class Ubuntu(Base):
 
         # Access key
         # Find sshkey file path
-        sshkey_path = find("id_rsa.pub", "/")
+        sshkey_path = self.find("id_rsa.pub", "/")
         file_input = self.driver.find_element_by_tag_name("input")
         file_input.send_keys(sshkey_path)
 
